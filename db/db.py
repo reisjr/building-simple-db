@@ -11,6 +11,8 @@ EXECUTE_SUCCESS = "EXECUTE_SUCCESS"
 EXECUTE_TABLE_FULL = "EXECUTE_TABLE_FULL"
 
 PREPARE_SUCCESS = "PREPARE_SUCCESS"
+PREPARE_NEGATIVE_ID = "PREPARE_NEGATIVE_ID"
+PREPARE_STRING_TOO_LONG = "PREPARE_STRING_TOO_LONG"
 PREPARE_SYNTAX_ERROR = "PREPARE_SYNTAX_ERROR"
 PREPARE_UNRECOGNIZED_STATEMENT = "PREPARE_UNRECOGNIZED_STATEMENT"
 
@@ -19,6 +21,9 @@ PAGE_SIZE = 4096
 TABLE_MAX_PAGES = 100
 ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE
 TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES
+
+COLUMN_USERNAME_SIZE = 32
+COLUMN_EMAIL_SIZE = 255
 
 
 def new_table():
@@ -93,13 +98,28 @@ def prepare_statement(cmd):
     }
 
     if cmd.lower().startswith("insert"):
-        match = re.match(r'insert (\d+) (.+) (.+)', cmd, re.IGNORECASE)
+        match = re.match(r'insert ([+-]?\d+) (.+) (.+)', cmd, re.IGNORECASE)
         if match:
-            ret["success"] = True
-            ret["error"] = ""
             ret["statement"]["type"] = STATEMENT_INSERT
-            print(match.group(1), match.group(2), match.group(3))
-            ret["statement"]["row_to_insert"] = [match.group(1), match.group(2), match.group(3)]
+            
+            #print(">>> {} ".format(ret.get("statement")))
+
+            user_id = int(match.group(1))
+            username = match.group(2)
+            email = match.group(3)
+            
+            #print(">>> {} {} {}".format(user_id, username, email))
+            
+            if user_id < 0: # Could use regex
+                ret["error"] = PREPARE_NEGATIVE_ID
+            elif len(username) > COLUMN_USERNAME_SIZE:
+                ret["error"] = PREPARE_STRING_TOO_LONG
+            elif len(email) > COLUMN_EMAIL_SIZE:
+                ret["error"] = PREPARE_STRING_TOO_LONG
+            else:
+                ret["success"] = True
+                ret["statement"]["row_to_insert"] = [user_id, username, email]
+                ret["error"] = ""
         else:
             ret["error"] = PREPARE_SYNTAX_ERROR
     elif cmd.lower().startswith("select"):
