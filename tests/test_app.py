@@ -1,4 +1,4 @@
-from db.db import new_table, is_meta, execute_insert, execute_select, EXECUTE_SUCCESS, EXECUTE_TABLE_FULL, prepare_statement, STATEMENT_INSERT, PREPARE_NEGATIVE_ID, PREPARE_STRING_TOO_LONG
+from db.db import db_open, db_close, is_meta, execute_insert, execute_select, EXECUTE_SUCCESS, EXECUTE_TABLE_FULL, prepare_statement, STATEMENT_INSERT, PREPARE_NEGATIVE_ID, PREPARE_STRING_TOO_LONG
 import json
 import logging
 import pprint
@@ -58,7 +58,7 @@ def test_prepare_statement_insert_email_too_long():
     
 
 def test_execute_insert_valid():
-    table = new_table()
+    table = db_open("/tmp/my_test.db")
     statement = { 
         "success": True,
         "statement": {
@@ -71,12 +71,12 @@ def test_execute_insert_valid():
 
     assert ret == EXECUTE_SUCCESS
     assert table["num_rows"] == 1
-    assert table["pages"]
-    assert table["pages"][0][0][0] == 1
+    #assert table["pages"]
+    assert table.get("pager").get("pages")[0][0][0] == 1
     
 
 def test_execute_select():
-    table = new_table()
+    table = db_open("/tmp/my_test.db")
     statement = { 
         "success": True,
         "statement": {
@@ -89,12 +89,12 @@ def test_execute_select():
     ret = execute_select(statement, table)
 
     assert table["num_rows"] == 1
-    assert table["pages"]
+    #assert len(table.get("pager").get("pages")) == 1
     assert ret == EXECUTE_SUCCESS
     
 
 def test_table_full():
-    table = new_table()
+    table = db_open("/tmp/my_test.db")
     statement = { 
         "success": True,
         "statement": {
@@ -112,3 +112,23 @@ def test_table_full():
             break
 
     assert table_full_found
+
+def test_close_and_open_db():
+    table = db_open("/tmp/my_test_close.db")
+    statement = { 
+        "success": True,
+        "statement": {
+            "type": "insert",
+            "row_to_insert": [1, 2, 3]
+        }
+    }
+
+    execute_insert(statement, table)
+    db_close(table)
+    
+    table = db_open("/tmp/my_test_close.db")
+    ret = execute_select(statement, table)
+
+    assert table["num_rows"] == 1
+    #assert len(table.get("pager").get("pages")) == 1
+    assert ret == EXECUTE_SUCCESS
