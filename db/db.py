@@ -2,7 +2,6 @@ import os
 import sys
 import re
 
-#def print_prompt():
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 
@@ -27,6 +26,45 @@ TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES
 COLUMN_USERNAME_SIZE = 32
 COLUMN_EMAIL_SIZE = 255
 
+# CURSOR
+
+def cursor_print(cursor):
+    print("row_num: {} end_of_table: {}".format(
+        cursor.get("row_num"), 
+        cursor.get("end_of_table"))
+    )
+
+
+def cursor_advance(cursor):
+  # print(">cursor_advance")
+  cursor["row_num"] = int(cursor.get("row_num") + 1)
+
+  if cursor.get("row_num") >= cursor.get("table").get("num_rows"):
+    cursor["end_of_table"] = True
+
+
+def create_cursor(table, row_num):
+    return {
+        "table": table,
+        "row_num": row_num,
+        "end_of_table": False
+    }
+
+
+def table_start(table):
+    cursor = create_cursor(table, 0)
+    cursor.setdefault("end_of_table", True if table.get("num_rows") == 0 else False)
+    
+    return cursor
+
+
+def table_end(table):
+    cursor = create_cursor(table, table.get("num_rows"))
+    cursor.setdefault("end_of_table", True)
+
+    return cursor
+
+# PAGER
 
 def pager_open(filename):
     fd = None
@@ -76,6 +114,7 @@ def write_page(fd, page):
     for i in range(0, len(page)):
         os.write(fd, get_page_element_bytes(page[i]))
 
+
 def pager_flush(pager, page_num, size):
     if pager.get("pages")[page_num] == None:
         print(f"Tried to flush null page")
@@ -124,28 +163,11 @@ def db_close(table):
         print("Error closing db file.")
         sys.exit(EXIT_FAILURE)
 
-    # for i in range(0, TABLE_MAX_PAGES):
-    #     page = pager.get("pages")[i]
-    #     if page:
-    #         free(page)
-    #         pager.get(pages)[i] = None
-
-    # free(pager)
-    # free(table)
-
-
-# def new_table():
-#     table = {
-#         "num_rows": 0,
-#         "pages": [] #[None] * TABLE_MAX_PAGES
-#     }
-
-#     return table
 
 def decode_page(page_bytes):
-    print(f"decode_page: '{page_bytes}'")
+    # print(f"decode_page: '{page_bytes}'")
     page_string = page_bytes.decode("utf-8")
-    print(f"page_string: '{page_string}'")
+    # print(f"page_string: '{page_string}'")
     
     page = []
     
@@ -198,16 +220,19 @@ def get_page(pager, page_num):
     return pager.get("pages")[page_num]
 
 
-def row_slot(table, row_num):    
+# def row_slot(table, row_num):
+def cursor_value(cursor):
+    row_num = cursor.get("row_num")
     page_num = row_num / ROWS_PER_PAGE
-    page = get_page(table["pager"], page_num)
+    # page = get_page(table["pager"], page_num)
+    page = get_page(cursor.get("table").get("pager"), page_num)
     page_num_int = int(page_num)
 
     return page_num_int, int(row_num - page_num_int * PAGE_SIZE)
 
 
 def print_row(row):
-    print(f">print_row {row}") 
+    # print(f">print_row {row}") 
     print("({}, {}, {})".format(row[0], row[1], row[2]))
 
 
@@ -227,6 +252,7 @@ def prepare_row(id, username, email):
         "email": email
     }
 
+# PREPARE
 
 def process_meta_command(cmd, table):
     ret = {
@@ -287,35 +313,42 @@ def prepare_statement(cmd):
 
     return ret
 
+# EXECUTE
 
 def execute_insert(statement, table):
     if table["num_rows"] >= TABLE_MAX_ROWS:
         return EXECUTE_TABLE_FULL
     
-    #Row* row_to_insert = &(statement->row_to_insert)
-    page_num, index = row_slot(table, table["num_rows"])
+    cursor = table_end(table)
+    page_num, index = cursor_value(cursor)
     
-    print(table)
     page = table.get("pager").get("pages")[page_num]
     page.append(statement["statement"]["row_to_insert"])
     
     table["num_rows"] += 1
 
+    # free(cursor)
+    cursor = None
+
     return EXECUTE_SUCCESS
 
 
 def execute_select(statement, table):
-    row = ""
+    cursor = table_start(table)
     
-    #print(table)
-    for i in range(0, int(table.get("num_rows"))):
-        page_num, index = row_slot(table, i)
+    while not cursor.get("end_of_table"):
+        page_num, index = cursor_value(cursor)
         #print(f"page_num: {page_num}, index: {index}")
         #print(f"page_num: {page_num}, index: {index}, table: {table}")
         #print(table.get("pager").get("pages")[page_num])
         #deserialize_row
-        #print(table)
+        #print(f"page_num: '{page_num}' index: '{index}'")
         print_row(table.get("pager").get("pages")[page_num][index])
+        cursor_advance(cursor)
+    
+    # free(cursor)
+    # Is this necessary in Python?
+    cursor = None
 
     return EXECUTE_SUCCESS
 
